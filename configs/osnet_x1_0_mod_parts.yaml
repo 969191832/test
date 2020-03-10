@@ -1,0 +1,62 @@
+model:
+  name: 'osnet_mod_parts'
+  pretrained: True
+  load_weights: ''
+  resume: ''
+  with_attention: False
+ 
+data:
+  type: 'image'
+  sources: ['market1501'] # ['market1501', 'dukemtmcreid', 'cuhk03']
+  targets: ['market1501'] # ['market1501', 'dukemtmcreid', 'cuhk03']
+  height: 256
+  width: 128
+  combineall: False
+  transforms: ['random_flip']
+  norm_mean: [0.485, 0.456, 0.406]
+  norm_std: [0.229, 0.224, 0.225]
+  save_dir: 'osnet_parts/two_split_B32_drop_GAP_GeM_global'
+
+loss:
+  name: 'triplet'  # -------------
+  softmax:
+    label_smooth: True
+  triplet:
+    margin: 0.3
+    weight_t: 1.0
+    weight_x: 1.0
+    weight_c: 0.0005
+    type_name: 'triplet' # softmargintriplet, theoretriplet
+
+sampler:
+  train_sampler: 'RandomIdentitySampler' #'RandomIdentitySampler'
+  num_instances: 4
+
+train:
+  optim: 'adam' # amsgrad --------------------------------------------
+  lr: 0.00035
+  max_epoch: 150
+  batch_size: 32
+  # fixbase_epoch: 10
+  # open_layers: ['classifier']  ##   <<<<--------------------------------
+  lr_scheduler: 'warmup'
+  stepsize: [60, 90]
+  staged_lr: False
+  seed: 1
+  start_epoch: 0
+  warmup_total_epoch: 20
+  warmup_multiplier: 10
+
+test:
+  batch_size: 300
+  dist_metric: 'euclidean' # 'euclidean'
+  normalize_feature: True
+  evaluate: False
+  eval_freq: 5
+  rerank: False
+  visactmap: False
+  start_eval: 0
+
+cuhk03:
+    labeled_images: True
+    use_metric_cuhk03: False
