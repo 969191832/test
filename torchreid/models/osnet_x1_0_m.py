@@ -3,13 +3,21 @@ import warnings
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .layer import GeM, Non_local, SEModule, PAM_Module, CAM_Module, Attention_Module
+#from .layer import GeM
 
-__all__ = ['osnet_x1_0_mod']
+__all__ = ['osnet_x1_0_m']
 
 pretrained_urls = {
     'osnet_x1_0':
     'https://drive.google.com/uc?id=1LaG1EJpHrxdAxKnSCJ_i0u-nbxSAeiFY',
+    'osnet_x0_75':
+    'https://drive.google.com/uc?id=1uwA9fElHOk3ZogwbeY5GkLI6QPTX70Hq',
+    'osnet_x0_5':
+    'https://drive.google.com/uc?id=16DGLbZukvVYgINws8u8deSaOqjybZ83i',
+    'osnet_x0_25':
+    'https://drive.google.com/uc?id=1rb8UN5ZzPKRc_xvtHlyDh-cSz88YX9hs',
+    'osnet_ibn_x1_0':
+    'https://drive.google.com/uc?id=2sr90V6irlYYDd4_4ISU2iruoRG8J__6l'
 }
 
 
@@ -18,27 +26,22 @@ pretrained_urls = {
 ##########
 class ConvLayer(nn.Module):
     """Convolution layer (conv + bn + relu)."""
-
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride=1,
-        padding=0,
-        groups=1,
-        IN=False
-    ):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 padding=0,
+                 groups=1,
+                 IN=False):
         super(ConvLayer, self).__init__()
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=False,
-            groups=groups
-        )
+        self.conv = nn.Conv2d(in_channels,
+                              out_channels,
+                              kernel_size,
+                              stride=stride,
+                              padding=padding,
+                              bias=False,
+                              groups=groups)
         if IN:
             self.bn = nn.InstanceNorm2d(out_channels, affine=True)
         else:
@@ -54,18 +57,15 @@ class ConvLayer(nn.Module):
 
 class Conv1x1(nn.Module):
     """1x1 convolution + bn + relu."""
-
     def __init__(self, in_channels, out_channels, stride=1, groups=1):
         super(Conv1x1, self).__init__()
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            1,
-            stride=stride,
-            padding=0,
-            bias=False,
-            groups=groups
-        )
+        self.conv = nn.Conv2d(in_channels,
+                              out_channels,
+                              1,
+                              stride=stride,
+                              padding=0,
+                              bias=False,
+                              groups=groups)
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
@@ -78,12 +78,14 @@ class Conv1x1(nn.Module):
 
 class Conv1x1Linear(nn.Module):
     """1x1 convolution + bn (w/o non-linearity)."""
-
     def __init__(self, in_channels, out_channels, stride=1):
         super(Conv1x1Linear, self).__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, 1, stride=stride, padding=0, bias=False
-        )
+        self.conv = nn.Conv2d(in_channels,
+                              out_channels,
+                              1,
+                              stride=stride,
+                              padding=0,
+                              bias=False)
         self.bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
@@ -94,18 +96,15 @@ class Conv1x1Linear(nn.Module):
 
 class Conv3x3(nn.Module):
     """3x3 convolution + bn + relu."""
-
     def __init__(self, in_channels, out_channels, stride=1, groups=1):
         super(Conv3x3, self).__init__()
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            3,
-            stride=stride,
-            padding=1,
-            bias=False,
-            groups=groups
-        )
+        self.conv = nn.Conv2d(in_channels,
+                              out_channels,
+                              3,
+                              stride=stride,
+                              padding=1,
+                              bias=False,
+                              groups=groups)
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
@@ -121,21 +120,21 @@ class LightConv3x3(nn.Module):
 
     1x1 (linear) + dw 3x3 (nonlinear).
     """
-
     def __init__(self, in_channels, out_channels):
         super(LightConv3x3, self).__init__()
-        self.conv1 = nn.Conv2d(
-            in_channels, out_channels, 1, stride=1, padding=0, bias=False
-        )
-        self.conv2 = nn.Conv2d(
-            out_channels,
-            out_channels,
-            3,
-            stride=1,
-            padding=1,
-            bias=False,
-            groups=out_channels
-        )
+        self.conv1 = nn.Conv2d(in_channels,
+                               out_channels,
+                               1,
+                               stride=1,
+                               padding=0,
+                               bias=False)
+        self.conv2 = nn.Conv2d(out_channels,
+                               out_channels,
+                               3,
+                               stride=1,
+                               padding=1,
+                               bias=False,
+                               groups=out_channels)
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
@@ -152,39 +151,32 @@ class LightConv3x3(nn.Module):
 ##########
 class ChannelGate(nn.Module):
     """A mini-network that generates channel-wise gates conditioned on input tensor."""
-
-    def __init__(
-        self,
-        in_channels,
-        num_gates=None,
-        return_gates=False,
-        gate_activation='sigmoid',
-        reduction=16,
-        layer_norm=False
-    ):
+    def __init__(self,
+                 in_channels,
+                 num_gates=None,
+                 return_gates=False,
+                 gate_activation='sigmoid',
+                 reduction=16,
+                 layer_norm=False):
         super(ChannelGate, self).__init__()
         if num_gates is None:
             num_gates = in_channels
         self.return_gates = return_gates
         self.global_avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc1 = nn.Conv2d(
-            in_channels,
-            in_channels // reduction,
-            kernel_size=1,
-            bias=True,
-            padding=0
-        )
+        self.fc1 = nn.Conv2d(in_channels,
+                             in_channels // reduction,
+                             kernel_size=1,
+                             bias=True,
+                             padding=0)
         self.norm1 = None
         if layer_norm:
             self.norm1 = nn.LayerNorm((in_channels // reduction, 1, 1))
         self.relu = nn.ReLU(inplace=True)
-        self.fc2 = nn.Conv2d(
-            in_channels // reduction,
-            num_gates,
-            kernel_size=1,
-            bias=True,
-            padding=0
-        )
+        self.fc2 = nn.Conv2d(in_channels // reduction,
+                             num_gates,
+                             kernel_size=1,
+                             bias=True,
+                             padding=0)
         if gate_activation == 'sigmoid':
             self.gate_activation = nn.Sigmoid()
         elif gate_activation == 'relu':
@@ -193,8 +185,7 @@ class ChannelGate(nn.Module):
             self.gate_activation = None
         else:
             raise RuntimeError(
-                "Unknown gate activation: {}".format(gate_activation)
-            )
+                "Unknown gate activation: {}".format(gate_activation))
 
     def forward(self, x):
         input = x
@@ -213,15 +204,12 @@ class ChannelGate(nn.Module):
 
 class OSBlock(nn.Module):
     """Omni-scale feature learning block."""
-
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        IN=False,
-        bottleneck_reduction=4,
-        **kwargs
-    ):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 IN=False,
+                 bottleneck_reduction=4,
+                 **kwargs):
         super(OSBlock, self).__init__()
         mid_channels = out_channels // bottleneck_reduction
         self.conv1 = Conv1x1(in_channels, mid_channels)
@@ -258,10 +246,14 @@ class OSBlock(nn.Module):
         x2c = self.conv2c(x1)
         x2d = self.conv2d(x1)
         x2 = self.gate(x2a) + self.gate(x2b) + self.gate(x2c) + self.gate(x2d)
+        # x2 = x2a + x2b + x2c + x2d
+        print('x2', x2.shape)
         x3 = self.conv3(x2)
+        print('x3', x3.shape)
         if self.downsample is not None:
             identity = self.downsample(identity)
         out = x3 + identity
+        print('out.shape', out.shape)
         if self.IN is not None:
             out = self.IN(out)
         return F.relu(out)
@@ -278,18 +270,15 @@ class OSNet(nn.Module):
         - Zhou et al. Learning Generalisable Omni-Scale Representations
           for Person Re-Identification. arXiv preprint, 2019.
     """
-
-    def __init__(
-        self,
-        num_classes,
-        blocks,
-        layers,
-        channels,
-        feature_dim=512,
-        loss='softmax',
-        IN=False,
-        **kwargs
-    ):
+    def __init__(self,
+                 num_classes,
+                 blocks,
+                 layers,
+                 channels,
+                 feature_dim=512,
+                 loss='softmax',
+                 IN=False,
+                 **kwargs):
         super(OSNet, self).__init__()
         num_blocks = len(blocks)
         assert num_blocks == len(layers)
@@ -299,56 +288,42 @@ class OSNet(nn.Module):
         # convolutional backbone
         self.conv1 = ConvLayer(3, channels[0], 7, stride=2, padding=3, IN=IN)
         self.maxpool = nn.MaxPool2d(3, stride=2, padding=1)
-        self.conv2 = self._make_layer(
-            blocks[0],
-            layers[0],
-            channels[0],
-            channels[1],
-            reduce_spatial_size=True,
-            IN=IN
-        )
-        self.att_1 = Attention_Module(256)
-        self.conv3 = self._make_layer(
-            blocks[1],
-            layers[1],
-            channels[1],
-            channels[2],
-            reduce_spatial_size=True
-        )
-        self.att_2 = Attention_Module(384)
-        self.conv4 = self._make_layer(
-            blocks[2],
-            layers[2],
-            channels[2],
-            channels[3],
-            reduce_spatial_size=False
-        )
+        self.conv2 = self._make_layer(blocks[0],
+                                      layers[0],
+                                      channels[0],
+                                      channels[1],
+                                      reduce_spatial_size=True,
+                                      IN=IN)
+        self.conv3 = self._make_layer(blocks[1],
+                                      layers[1],
+                                      channels[1],
+                                      channels[2],
+                                      reduce_spatial_size=True)
+        self.conv4 = self._make_layer(blocks[2],
+                                      layers[2],
+                                      channels[2],
+                                      channels[3],
+                                      reduce_spatial_size=False)
         self.conv5 = Conv1x1(channels[3], channels[3])
         self.global_avgpool = nn.AdaptiveAvgPool2d(1)
-        # self.se = SEModule(channels[3], 16)
         # self.global_maxpool = nn.AdaptiveMaxPool2d(1)
         # self.gem = GeM()
         # fully connected layer
-        # self.fc = self._construct_fc_layer(
-        #     feature_dim, channels[3], dropout_p=None
-        # )
+        self.fc = self._construct_fc_layer(feature_dim,
+                                           channels[3],
+                                           dropout_p=None)
         # identity classification layer
-        self.fc = nn.Linear(channels[3], 512)
-        self.bn = nn.BatchNorm1d(512)
-        # self.classifier = nn.Linear(self.feature_dim, num_classes, bias=False)
-        self.classifier = nn.Linear(feature_dim, num_classes)
+        self.classifier = nn.Linear(self.feature_dim, num_classes)
 
         self._init_params()
 
-    def _make_layer(
-        self,
-        block,
-        layer,
-        in_channels,
-        out_channels,
-        reduce_spatial_size,
-        IN=False
-    ):
+    def _make_layer(self,
+                    block,
+                    layer,
+                    in_channels,
+                    out_channels,
+                    reduce_spatial_size,
+                    IN=False):
         layers = []
 
         layers.append(block(in_channels, out_channels, IN=IN))
@@ -357,11 +332,8 @@ class OSNet(nn.Module):
 
         if reduce_spatial_size:
             layers.append(
-                nn.Sequential(
-                    Conv1x1(out_channels, out_channels),
-                    nn.AvgPool2d(2, stride=2)
-                )
-            )
+                nn.Sequential(Conv1x1(out_channels, out_channels),
+                              nn.AvgPool2d(2, stride=2)))
 
         return nn.Sequential(*layers)
 
@@ -389,9 +361,9 @@ class OSNet(nn.Module):
     def _init_params(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(
-                    m.weight, mode='fan_out', nonlinearity='relu'
-                )
+                nn.init.kaiming_normal_(m.weight,
+                                        mode='fan_out',
+                                        nonlinearity='relu')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
@@ -412,9 +384,7 @@ class OSNet(nn.Module):
         x = self.conv1(x)
         x = self.maxpool(x)
         x = self.conv2(x)
-        x = self.att_1(x)
         x = self.conv3(x)
-        x = self.att_2(x)
         x = self.conv4(x)
         x = self.conv5(x)
         return x
@@ -424,19 +394,18 @@ class OSNet(nn.Module):
         if return_featuremaps:
             return x
         v = self.global_avgpool(x)
-        # v = self.se(v)
-        v = v.view(v.size(0), -1) # 1024
-        vv = self.fc(v)
-        v = self.bn(vv)
-        # if self.fc is not None:
-        #     v = self.fc(v)
+        # v = self.global_maxpool(x)
+        # v = self.gem(x)
+        v = v.view(v.size(0), -1)
+        if self.fc is not None:
+            v = self.fc(v)
         if not self.training:
             return v
         y = self.classifier(v)
         if self.loss == 'softmax':
             return y
         elif self.loss == 'triplet':
-            return y, vv
+            return y, v
         else:
             raise KeyError("Unsupported loss: {}".format(self.loss))
 
@@ -458,11 +427,8 @@ def init_pretrained_weights(model, key=''):
         torch_home = os.path.expanduser(
             os.getenv(
                 ENV_TORCH_HOME,
-                os.path.join(
-                    os.getenv(ENV_XDG_CACHE_HOME, DEFAULT_CACHE_DIR), 'torch'
-                )
-            )
-        )
+                os.path.join(os.getenv(ENV_XDG_CACHE_HOME, DEFAULT_CACHE_DIR),
+                             'torch')))
         return torch_home
 
     torch_home = _get_torch_home()
@@ -489,7 +455,7 @@ def init_pretrained_weights(model, key=''):
 
     for k, v in state_dict.items():
         if k.startswith('module.'):
-            k = k[7:] # discard module.
+            k = k[7:]  # discard module.
 
         if k in model_dict and model_dict[k].size() == v.size():
             new_state_dict[k] = v
@@ -501,39 +467,30 @@ def init_pretrained_weights(model, key=''):
     model.load_state_dict(model_dict)
 
     if len(matched_layers) == 0:
-        warnings.warn(
-            'The pretrained weights from "{}" cannot be loaded, '
-            'please check the key names manually '
-            '(** ignored and continue **)'.format(cached_file)
-        )
+        warnings.warn('The pretrained weights from "{}" cannot be loaded, '
+                      'please check the key names manually '
+                      '(** ignored and continue **)'.format(cached_file))
     else:
         print(
-            'Successfully loaded imagenet pretrained weights from "{}"'.
-            format(cached_file)
-        )
+            'Successfully loaded imagenet pretrained weights from "{}"'.format(
+                cached_file))
         if len(discarded_layers) > 0:
-            print(
-                '** The following layers are discarded '
-                'due to unmatched keys or layer size: {}'.
-                format(discarded_layers)
-            )
+            print('** The following layers are discarded '
+                  'due to unmatched keys or layer size: {}'.format(
+                      discarded_layers))
 
 
 ##########
 # Instantiation
 ##########
-def osnet_x1_0_mod(
-    num_classes=1000, pretrained=True, loss='softmax', **kwargs
-):
+def osnet_x1_0_m(num_classes=1000, pretrained=True, loss='softmax', **kwargs):
     # standard size (width x1.0)
-    model = OSNet(
-        num_classes,
-        blocks=[OSBlock, OSBlock, OSBlock],
-        layers=[2, 2, 2],
-        channels=[64, 256, 384, 512],
-        loss=loss,
-        **kwargs
-    )
+    model = OSNet(num_classes,
+                  blocks=[OSBlock, OSBlock, OSBlock],
+                  layers=[2, 2, 2],
+                  channels=[64, 256, 384, 512],
+                  loss=loss,
+                  **kwargs)
     if pretrained:
         init_pretrained_weights(model, key='osnet_x1_0')
     return model
@@ -541,6 +498,6 @@ def osnet_x1_0_mod(
 
 if __name__ == '__main__':
     from torchsummary import summary
-    model = osnet_x1_0_mod(num_classes=1000, pretrained=True, loss='softmax')
-    print(model)
+    model = osnet_x1_0_m(num_classes=0, pretrained=False, loss='softmax')
+    # print(model)
     print(summary(model, (3, 256, 128), device='cpu'))

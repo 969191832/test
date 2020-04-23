@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 
-__all__ = ['osnet_mod_two_branch']
+__all__ = ['osnet_mod_two_multi']
 
 import torch
 from torch import nn
@@ -17,6 +17,47 @@ if __name__ == '__main__':  # for debug
 else:
     from .osnet import *
     from .layer import *
+
+
+class Conv1x1Linear(nn.Module):
+    """1x1 convolution + bn (w/o non-linearity)."""
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(Conv1x1Linear, self).__init__()
+        self.conv = nn.Conv2d(in_channels,
+                              out_channels,
+                              1,
+                              stride=stride,
+                              padding=0,
+                              bias=False)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self._init_params()
+
+    def _init_params(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight,
+                                        mode='fan_out',
+                                        nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+            elif isinstance(m, nn.BatchNorm1d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        return x
 
 
 class OSNetMod(nn.Module):
@@ -45,37 +86,46 @@ class OSNetMod(nn.Module):
         self.global_avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # self.global_maxpool = nn.AdaptiveMaxPool2d((1, 1))
         self.gem = GeM()
+        self.gem2 = GeM()
+
+        self.conv_2 = Conv1x1Linear(384, 128)
 
         if self.with_attention:
             self.se_module1 = SEModule(512, 16)
             self.se_module2 = SEModule(512, 16)
 
         self.bn1 = nn.BatchNorm1d(512)
-        self.bn2 = nn.BatchNorm1d(512)
-        self.bn1.bias.requires_grad_(False)
-        self.bn2.bias.requires_grad_(False)
-
+        self.bn2 = nn.BatchNorm1d(640)
         self.dropout1 = nn.Dropout(0.5)
         self.dropout2 = nn.Dropout(0.5)
 
         self.classifier1 = nn.Linear(512, num_classes, bias=False)
-        self.classifier2 = nn.Linear(512, num_classes, bias=False)
+        self.classifier2 = nn.Linear(640, num_classes, bias=False)
 
+        self._init_param()
+
+    def _init_param(self):
+        self.bn1.bias.requires_grad_(False)
+        self.bn2.bias.requires_grad_(False)
         self.bn1.apply(weights_init_kaiming)
         self.bn2.apply(weights_init_kaiming)
         self.classifier1.apply(weights_init_classifier)
         self.classifier2.apply(weights_init_classifier)
 
     def featuremaps(self, x):
-        x = self.layer0(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        return x
+        x0 = self.layer0(x)
+        x1 = self.layer1(x0)
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
+        x4 = self.layer4(x3)
+        return x2, x4
 
     def forward(self, x):
-        f = self.featuremaps(x)  ## 64, 512, 16, 8
+        x2, f = self.featuremaps(x)  ## 64, 512, 16, 8
+
+        x2 = self.conv_2(x2)
+        x2 = self.gem2(x2)
+        x2 = x2.view(x2.size(0), -1)
 
         if self.with_attention:
             f1 = self.pam(f)
@@ -91,10 +141,12 @@ class OSNetMod(nn.Module):
         v_avg = v_avg.view(v_avg.size(0), -1)
         v_gem = v_gem.view(v_gem.size(0), -1)
 
-        fea = [v_avg, v_gem]
+        v_down = torch.cat([v_gem, x2], dim=1)
+
+        fea = [v_avg, v_down]
 
         v1 = self.bn1(v_avg)
-        v2 = self.bn2(v_gem)
+        v2 = self.bn2(v_down)
 
         if not self.training:
             v1 = F.normalize(v1, p=2, dim=1)
@@ -115,11 +167,11 @@ class OSNetMod(nn.Module):
             raise KeyError("Unsupported loss: {}".format(self.loss))
 
 
-def osnet_mod_two_branch(num_classes,
-                         loss='softmax',
-                         pretrained=True,
-                         with_attention=True,
-                         **kwargs):
+def osnet_mod_two_multi(num_classes,
+                        loss='softmax',
+                        pretrained=True,
+                        with_attention=True,
+                        **kwargs):
     model = OSNetMod(num_classes=num_classes,
                      fc_dims=512,
                      loss=loss,
@@ -130,6 +182,9 @@ def osnet_mod_two_branch(num_classes,
 
 if __name__ == '__main__':
     from torchsummary import summary
-    model = osnet_x1_0_mod(100)
+    model = osnet_mod_two_multi(100)
     print(model)
-    print(summary(model, (3, 256, 128), device='cpu'))
+    import torch
+    a = torch.rand(64, 3, 256, 128)
+    model(a)
+    # print(summary(model, (3, 256, 128), device='cpu'))

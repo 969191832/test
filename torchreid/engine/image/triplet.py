@@ -32,8 +32,6 @@ class ImageTripletEngine(Engine):
         self.weight_c = weight_c
         self.type_name = type_name
 
-        ####
-
         if type_name == 'triplet':
             print("using triplet...")
             tripletLoss = TripletLoss
@@ -51,16 +49,6 @@ class ImageTripletEngine(Engine):
             label_smooth=label_smooth)
         self.criterion_c = CenterLoss(
             num_classes=self.datamanager.num_train_pids, feat_dim=512)
-        # self.criterion_r = RangeLoss(
-        #     k=2,
-        #     margin=0.3,
-        #     alpha=0,
-        #     beta=1,
-        #     ordered=True,
-        #     use_gpu=True,
-        #     ids_per_batch=16,
-        #     imgs_per_id=4
-        # )
 
     def train(self,
               epoch,
@@ -104,9 +92,8 @@ class ImageTripletEngine(Engine):
             else:
                 self.weight_c = 0
                 loss_c = 0
-            # loss_r = self.criterion_r(features[0], pids)[0]
 
-            loss = self.weight_t * loss_t + self.weight_x * loss_x + self.weight_c * loss_c  # + loss_r
+            loss = self.weight_t * loss_t + self.weight_x * loss_x + self.weight_c * loss_c
             loss.backward()
             self.optimizer.step()
 

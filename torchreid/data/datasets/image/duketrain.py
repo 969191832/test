@@ -6,7 +6,7 @@ import os.path as osp
 from ..dataset import ImageDataset
 
 
-class DukeMTMCreID(ImageDataset):
+class DukeTrain(ImageDataset):
     """DukeMTMC-reID.
 
     Reference:
@@ -28,11 +28,11 @@ class DukeMTMCreID(ImageDataset):
         self.dataset_dir = osp.join(self.root, self.dataset_dir)
         self.download_dataset(self.dataset_dir, self.dataset_url)
         self.train_dir = osp.join(
-            self.dataset_dir, 'DukeMTMC-reID/bounding_box_train'
+            self.dataset_dir, 'DukeTrain/bounding_box_train'
         )
-        self.query_dir = osp.join(self.dataset_dir, 'DukeMTMC-reID/query')
+        self.query_dir = osp.join(self.dataset_dir, 'DukeTrain/query')
         self.gallery_dir = osp.join(
-            self.dataset_dir, 'DukeMTMC-reID/bounding_box_test'
+            self.dataset_dir, 'DukeTrain/gallery'
         )
 
         required_files = [
@@ -44,7 +44,7 @@ class DukeMTMCreID(ImageDataset):
         query = self.process_dir(self.query_dir, relabel=False)
         gallery = self.process_dir(self.gallery_dir, relabel=False)
 
-        super(DukeMTMCreID, self).__init__(train, query, gallery, **kwargs)
+        super(DukeTrain, self).__init__(train, query, gallery, **kwargs)
 
     def process_dir(self, dir_path, relabel=False):
         img_paths = glob.glob(osp.join(dir_path, '*.jpg'))

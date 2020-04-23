@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 
-__all__ = ['osnet_mod_single']
+__all__ = ['osnet_bnneck']
 
 import torch
 from torch import nn
@@ -38,26 +38,21 @@ class OSNetMod(nn.Module):
         self.layer3 = osnet.conv4
         self.layer4 = osnet.conv5
 
-        if with_attention:
-            self.cam = CAM_Module(512)
-        # self.global_avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        # self.global_maxpool = nn.AdaptiveMaxPool2d((1, 1))
-        self.gem = GeM()
+        # self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        # self.global_pool = nn.AdaptiveMaxPool2d((1, 1))
+        self.global_pool = GeM()
         #self.batchdrop = BatchDrop(0.3, 1.0)
-        if with_attention:
-            self.se_module = SEModule(512, 16)
-
-        # self.fc = nn.Linear(fc_dims * 2, 512, bias=False)
         self.bn = nn.BatchNorm1d(512)
-        self.bn.bias.requires_grad_(False)
-
         self.dropout = nn.Dropout(0.5)
         self.classifier = nn.Linear(512, num_classes, bias=False)
 
-        #self.fc.apply(weights_init_classifier)
+        self._init_param()
+
+    def _init_param(self):
+        self.bn.bias.requires_grad_(False)
         self.bn.apply(weights_init_kaiming)
         self.classifier.apply(weights_init_classifier)
-
+        
     def featuremaps(self, x):
         x = self.layer0(x)
         x = self.layer1(x)
@@ -68,22 +63,14 @@ class OSNetMod(nn.Module):
 
     def forward(self, x):
         f = self.featuremaps(x)
-        if self.with_attention:
-            f = self.cam(f)
+        v = self.global_pool(f)
+        v = v.view(v.size(0), -1)
 
-        v_gem = self.gem(f)
-
-        if self.with_attention:
-            v_gem = self.se_module(v_gem)
-
-        v_gem = v_gem.view(v_gem.size(0), -1)
-
-        fea = [v_gem]
-
-        v = self.bn(v_gem)
-
+        fea = [v]
+        v = self.bn(v)
         if not self.training:
             v = F.normalize(v, p=2, dim=1)
+            # v = torch.cat([v1, v2], dim=1)
             return v
 
         v = self.dropout(v)
@@ -97,11 +84,11 @@ class OSNetMod(nn.Module):
             raise KeyError("Unsupported loss: {}".format(self.loss))
 
 
-def osnet_mod_single(num_classes,
-                     loss='softmax',
-                     pretrained=True,
-                     with_attention=True,
-                     **kwargs):
+def osnet_bnneck(num_classes,
+                 loss='softmax',
+                 pretrained=True,
+                 with_attention=True,
+                 **kwargs):
     model = OSNetMod(num_classes=num_classes,
                      fc_dims=512,
                      loss=loss,
@@ -112,6 +99,6 @@ def osnet_mod_single(num_classes,
 
 if __name__ == '__main__':
     from torchsummary import summary
-    model = osnet_mod_single(100)
+    model = osnet_x1_0_mod(100)
     print(model)
     print(summary(model, (3, 256, 128), device='cpu'))

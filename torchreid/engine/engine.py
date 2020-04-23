@@ -8,22 +8,18 @@ from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from torchreid import metrics
-from torchreid.utils import (
-    AverageMeter, re_ranking, save_checkpoint, visualize_ranked_results, tsne
-)
+from torchreid.utils import (AverageMeter, re_ranking, save_checkpoint,
+                             visualize_ranked_results, tsne)
 from torchreid.losses import DeepSupervision
 
 
 class Engine(object):
-
-    def __init__(
-        self,
-        datamanager,
-        model,
-        optimizer=None,
-        scheduler=None,
-        use_gpu=True
-    ):
+    def __init__(self,
+                 datamanager,
+                 model,
+                 optimizer=None,
+                 scheduler=None,
+                 use_gpu=True):
         self.datamanager = datamanager
         self.model = model
         self.optimizer = optimizer
@@ -33,43 +29,38 @@ class Engine(object):
         self.train_loader = self.datamanager.train_loader
         self.test_loader = self.datamanager.test_loader
 
-    def run(
-        self,
-        save_dir='log',
-        max_epoch=0,
-        start_epoch=0,
-        print_freq=10,
-        fixbase_epoch=0,
-        open_layers=None,
-        start_eval=0,
-        eval_freq=-1,
-        test_only=False,
-        dist_metric='euclidean',
-        normalize_feature=False,
-        visrank=False,
-        visrank_topk=10,
-        use_metric_cuhk03=False,
-        ranks=[1, 5, 10, 20],
-        rerank=False
-    ):
+    def run(self,
+            save_dir='log',
+            max_epoch=0,
+            start_epoch=0,
+            print_freq=10,
+            fixbase_epoch=0,
+            open_layers=None,
+            start_eval=0,
+            eval_freq=-1,
+            test_only=False,
+            dist_metric='euclidean',
+            normalize_feature=False,
+            visrank=False,
+            visrank_topk=10,
+            use_metric_cuhk03=False,
+            ranks=[1, 5, 10, 20],
+            rerank=False):
 
         if visrank and not test_only:
             raise ValueError(
-                'visrank can be set to True only if test_only=True'
-            )
+                'visrank can be set to True only if test_only=True')
 
         if test_only:
-            self.test(
-                0,
-                dist_metric=dist_metric,
-                normalize_feature=normalize_feature,
-                visrank=visrank,
-                visrank_topk=visrank_topk,
-                save_dir=save_dir,
-                use_metric_cuhk03=use_metric_cuhk03,
-                ranks=ranks,
-                rerank=rerank
-            )
+            self.test(0,
+                      dist_metric=dist_metric,
+                      normalize_feature=normalize_feature,
+                      visrank=visrank,
+                      visrank_topk=visrank_topk,
+                      save_dir=save_dir,
+                      use_metric_cuhk03=use_metric_cuhk03,
+                      ranks=ranks,
+                      rerank=rerank)
             return
 
         if self.writer is None:
@@ -79,44 +70,38 @@ class Engine(object):
         print('=> Start training')
 
         for epoch in range(start_epoch, max_epoch):
-            self.train(
-                epoch,
-                max_epoch,
-                self.writer,
-                print_freq=print_freq,
-                fixbase_epoch=fixbase_epoch,
-                open_layers=open_layers
-            )
+            self.train(epoch,
+                       max_epoch,
+                       self.writer,
+                       print_freq=print_freq,
+                       fixbase_epoch=fixbase_epoch,
+                       open_layers=open_layers)
 
             if (epoch + 1) >= start_eval \
                and eval_freq > 0 \
                and (epoch+1) % eval_freq == 0 \
                and (epoch + 1) != max_epoch:
-                rank1 = self.test(
-                    epoch,
-                    dist_metric=dist_metric,
-                    normalize_feature=normalize_feature,
-                    visrank=visrank,
-                    visrank_topk=visrank_topk,
-                    save_dir=save_dir,
-                    use_metric_cuhk03=use_metric_cuhk03,
-                    ranks=ranks
-                )
-                if epoch + 25 >= max_epoch:
+                rank1 = self.test(epoch,
+                                  dist_metric=dist_metric,
+                                  normalize_feature=normalize_feature,
+                                  visrank=visrank,
+                                  visrank_topk=visrank_topk,
+                                  save_dir=save_dir,
+                                  use_metric_cuhk03=use_metric_cuhk03,
+                                  ranks=ranks)
+                if (epoch + 20) > max_epoch:
                     self._save_checkpoint(epoch, rank1, save_dir)
 
         if max_epoch > 0:
             print('=> Final test')
-            rank1 = self.test(
-                epoch,
-                dist_metric=dist_metric,
-                normalize_feature=normalize_feature,
-                visrank=visrank,
-                visrank_topk=visrank_topk,
-                save_dir=save_dir,
-                use_metric_cuhk03=use_metric_cuhk03,
-                ranks=ranks
-            )
+            rank1 = self.test(epoch,
+                              dist_metric=dist_metric,
+                              normalize_feature=normalize_feature,
+                              visrank=visrank,
+                              visrank_topk=visrank_topk,
+                              save_dir=save_dir,
+                              use_metric_cuhk03=use_metric_cuhk03,
+                              ranks=ranks)
             self._save_checkpoint(epoch, rank1, save_dir)
 
         elapsed = round(time.time() - time_start)
@@ -128,18 +113,16 @@ class Engine(object):
     def train(self):
         raise NotImplementedError
 
-    def test(
-        self,
-        epoch,
-        dist_metric='euclidean',
-        normalize_feature=False,
-        visrank=False,
-        visrank_topk=10,
-        save_dir='',
-        use_metric_cuhk03=False,
-        ranks=[1, 5, 10, 20],
-        rerank=False
-    ):
+    def test(self,
+             epoch,
+             dist_metric='euclidean',
+             normalize_feature=False,
+             visrank=False,
+             visrank_topk=10,
+             save_dir='',
+             use_metric_cuhk03=False,
+             ranks=[1, 5, 10, 20],
+             rerank=False):
         targets = list(self.test_loader.keys())
 
         for name in targets:
@@ -147,45 +130,41 @@ class Engine(object):
             print('##### Evaluating {} ({}) #####'.format(name, domain))
             query_loader = self.test_loader[name]['query']
             gallery_loader = self.test_loader[name]['gallery']
-            rank1 = self._evaluate(
-                epoch,
-                dataset_name=name,
-                query_loader=query_loader,
-                gallery_loader=gallery_loader,
-                dist_metric=dist_metric,
-                normalize_feature=normalize_feature,
-                visrank=visrank,
-                visrank_topk=visrank_topk,
-                save_dir=save_dir,
-                use_metric_cuhk03=use_metric_cuhk03,
-                ranks=ranks,
-                rerank=rerank
-            )
+            rank1 = self._evaluate(epoch,
+                                   dataset_name=name,
+                                   query_loader=query_loader,
+                                   gallery_loader=gallery_loader,
+                                   dist_metric=dist_metric,
+                                   normalize_feature=normalize_feature,
+                                   visrank=visrank,
+                                   visrank_topk=visrank_topk,
+                                   save_dir=save_dir,
+                                   use_metric_cuhk03=use_metric_cuhk03,
+                                   ranks=ranks,
+                                   rerank=rerank)
 
         return rank1
 
     @torch.no_grad()
-    def _evaluate(
-        self,
-        epoch,
-        dataset_name='',
-        query_loader=None,
-        gallery_loader=None,
-        dist_metric='euclidean',
-        normalize_feature=False,
-        visrank=False,
-        visrank_topk=10,
-        save_dir='',
-        use_metric_cuhk03=False,
-        ranks=[1, 5, 10, 20],
-        rerank=False
-    ):
+    def _evaluate(self,
+                  epoch,
+                  dataset_name='',
+                  query_loader=None,
+                  gallery_loader=None,
+                  dist_metric='euclidean',
+                  normalize_feature=False,
+                  visrank=False,
+                  visrank_topk=10,
+                  save_dir='',
+                  use_metric_cuhk03=False,
+                  ranks=[1, 5, 10, 20],
+                  rerank=False):
         batch_time = AverageMeter()
 
         def _feature_extraction(data_loader):
-            f_, pids_, camids_ = [], [], []
+            f_, pids_, camids_, imgs_paths = [], [], [], []
             for batch_idx, data in enumerate(data_loader):
-                imgs, pids, camids = self._parse_data_for_eval(data)
+                imgs, pids, camids, imgs_path = self._parse_data_for_eval(data)
                 if self.use_gpu:
                     imgs = imgs.cuda()
                 end = time.time()
@@ -195,17 +174,18 @@ class Engine(object):
                 f_.append(features)
                 pids_.extend(pids)
                 camids_.extend(camids)
+                imgs_paths.append(imgs_path)
             f_ = torch.cat(f_, 0)
             pids_ = np.asarray(pids_)
             camids_ = np.asarray(camids_)
-            return f_, pids_, camids_
+            return f_, pids_, camids_, imgs_paths
 
         print('Extracting features from query set ...')
-        qf, q_pids, q_camids = _feature_extraction(query_loader)
+        qf, q_pids, q_camids, q_img_paths = _feature_extraction(query_loader)
         print('Done, obtained {}-by-{} matrix'.format(qf.size(0), qf.size(1)))
 
         print('Extracting features from gallery set ...')
-        gf, g_pids, g_camids = _feature_extraction(gallery_loader)
+        gf, g_pids, g_camids, g_img_paths = _feature_extraction(gallery_loader)
         print('Done, obtained {}-by-{} matrix'.format(gf.size(0), gf.size(1)))
         # time1 = time.time()
         # tsne(gf, g_pids)
@@ -219,8 +199,7 @@ class Engine(object):
             gf = F.normalize(gf, p=2, dim=1)
 
         print(
-            'Computing distance matrix with metric={} ...'.format(dist_metric)
-        )
+            'Computing distance matrix with metric={} ...'.format(dist_metric))
         distmat = metrics.compute_distance_matrix(qf, gf, dist_metric)
         distmat = distmat.numpy()
 
@@ -231,32 +210,31 @@ class Engine(object):
             distmat = re_ranking(distmat, distmat_qq, distmat_gg)
 
         print('Computing CMC and mAP ...')
-        cmc, mAP = metrics.evaluate_rank(
+        cmc, mAP, mINP = metrics.evaluate_rank(
             distmat,
             q_pids,
             g_pids,
             q_camids,
             g_camids,
-            use_metric_cuhk03=use_metric_cuhk03
-        )
+            use_metric_cuhk03=use_metric_cuhk03)
 
         print('** Results **')
         print('mAP: {:.1%}'.format(mAP))
         print('CMC curve')
         for r in ranks:
             print('Rank-{:<3}: {:.1%}'.format(r, cmc[r - 1]))
+        print('mINP: {:.1%}'.format(mINP))
 
         if visrank:
             visualize_ranked_results(
                 distmat,
-                self.datamanager.
-                return_query_and_gallery_by_name(dataset_name),
+                self.datamanager.return_query_and_gallery_by_name(
+                    dataset_name),
                 self.datamanager.data_type,
                 width=self.datamanager.width,
                 height=self.datamanager.height,
                 save_dir=osp.join(save_dir, 'visrank_' + dataset_name),
-                topk=visrank_topk
-            )
+                topk=visrank_topk)
 
         return cmc[0]
 
@@ -280,7 +258,8 @@ class Engine(object):
         imgs = data[0]
         pids = data[1]
         camids = data[2]
-        return imgs, pids, camids
+        imgs_path = data[3]
+        return imgs, pids, camids, imgs_path
 
     def _save_checkpoint(self, epoch, rank1, save_dir, is_best=False):
         save_checkpoint(
@@ -292,5 +271,4 @@ class Engine(object):
                 'scheduler': self.scheduler.state_dict(),
             },
             save_dir,
-            is_best=is_best
-        )
+            is_best=is_best)
