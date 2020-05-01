@@ -1,4 +1,7 @@
 *.pyc
+.fitconfig
+.fitlog/
+logs/
 __pycache__/
 projects/
 tools/

@@ -5,7 +5,8 @@ import os.path as osp
 import argparse
 import torch
 import torch.nn as nn
-
+import fitlog
+import random
 import torchreid
 from torchreid.utils import (Logger, check_isfile, set_random_seed,
                              collect_env_info, resume_from_checkpoint,
@@ -124,6 +125,11 @@ def main():
     cfg.merge_from_list(args.opts)
     set_random_seed(cfg.train.seed)
 
+    fitlog.commit(__file__)  # auto commit your codes
+    fitlog.add_hyper_in_file(__file__)  # record your hyperparameters
+    rand_seed = cfg.train.seed
+    random.seed(rand_seed)
+
     log_name = 'test.log' if cfg.test.evaluate else 'train.log'
     log_name += time.strftime('-%Y-%m-%d-%H-%M-%S')
     sys.stdout = Logger(osp.join(cfg.data.save_dir, log_name))
@@ -170,6 +176,8 @@ def main():
                                                   cfg.data.type))
     engine = build_engine(cfg, datamanager, model, optimizer, scheduler)
     engine.run(**engine_run_kwargs(cfg))
+
+    fitlog.finish()
 
 
 if __name__ == '__main__':

@@ -12,6 +12,8 @@ from torchreid.utils import (AverageMeter, re_ranking, save_checkpoint,
                              visualize_ranked_results, tsne)
 from torchreid.losses import DeepSupervision
 
+import fitlog
+
 
 class Engine(object):
     def __init__(self,
@@ -28,6 +30,7 @@ class Engine(object):
         self.writer = None
         self.train_loader = self.datamanager.train_loader
         self.test_loader = self.datamanager.test_loader
+        self.best_rank = 0
 
     def run(self,
             save_dir='log',
@@ -217,6 +220,22 @@ class Engine(object):
             q_camids,
             g_camids,
             use_metric_cuhk03=use_metric_cuhk03)
+
+        fitlog.add_metric(cmc[0] * 100, name='Rank-1', step=epoch + 1)
+        fitlog.add_metric(mAP * 100, name='mAP', step=epoch + 1)
+        fitlog.add_metric(mINP * 100, name='mINP', step=epoch + 1)
+
+        if cmc[0] > self.best_rank:
+            self.best_rank = cmc[0]
+            best_step = epoch + 1
+            fitlog.add_best_metric({
+                "Test": {
+                    "Epoch": str(best_step),
+                    "Rank-1": '{:.1%}'.format(self.best_rank, ),
+                    "mAP": '{:.1%}'.format(mAP, ),
+                    "mINP": '{:.1%}'.format(mINP, ),
+                }
+            })
 
         print('** Results **')
         print('mAP: {:.1%}'.format(mAP))
